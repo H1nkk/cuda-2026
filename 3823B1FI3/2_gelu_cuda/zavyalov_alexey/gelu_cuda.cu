@@ -41,36 +41,36 @@ std::vector<float> GeluCUDA(const std::vector<float>& input) {
     cudaMemcpyAsync(a_gpu_second_half, input.data() + n / 2, (n + 1) / 2 * sizeof(float), cudaMemcpyHostToDevice, strm); // надо сделать асинк
 
     gelu_kernel<<<num_blocks_first, block_size>>>(a_gpu_first_half, result_gpu_first_half, n / 2);
-    static float* res_pinned = nullptr;
+    static float* res = nullptr;
     static int pinned_capacity = 0;
     static int call_number = 0;
     if (n > pinned_capacity) {
-        if (res_pinned) cudaFreeHost(res_pinned);
-        cudaMallocHost(&res_pinned, n * sizeof(float));
+        if (res) cudaFreeHost(res);
+        cudaMallocHost(&res, n * sizeof(float));
         pinned_capacity = n;
     }
     call_number++;
 
-    cudaMemcpyAsync(res_pinned, result_gpu_first_half, n / 2 * sizeof(float), cudaMemcpyDeviceToHost, strm); // надо сделать асинк
+    cudaMemcpy(res, result_gpu_first_half, n / 2 * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaStreamSynchronize(strm);
 
     gelu_kernel<<<num_blocks_second, block_size>>>(a_gpu_second_half, result_gpu_second_half, (n + 1) / 2);
 
-    cudaMemcpy(res_pinned + n / 2, result_gpu_second_half, (n + 1) / 2 * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(res + n / 2, result_gpu_second_half, (n + 1) / 2 * sizeof(float), cudaMemcpyDeviceToHost);
 
     cudaFree(a_gpu_first_half);
     cudaFree(a_gpu_second_half);
     cudaFree(result_gpu_second_half);
     cudaFree(result_gpu_first_half);
 
-    std::vector<float> res(res_pinned, res_pinned + n);
+    std::vector<float> res_vec(res, res + n);
     if (call_number == 5) {
-        cudaFreeHost(res_pinned);
+        cudaFreeHost(res);
         cudaFree(a_gpu_first_half);
         cudaFree(result_gpu_first_half);
         cudaFree(a_gpu_second_half);
         cudaFree(result_gpu_second_half);
     }
-    return res;
+    return res_vec;
 }
